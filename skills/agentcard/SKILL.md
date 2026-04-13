@@ -4,84 +4,180 @@ description: "Use this skill when the user wants to: set up a payment card, top 
 license: MIT
 metadata:
   author: xiaolu7586
-  version: "0.1.0"
+  version: "0.2.0"
   homepage: "https://agentcard.ai"
 ---
 
 # AgentCard — Prepaid Virtual Visa Card Management
 
-Manages the full lifecycle of the user's AgentCard: setup, funding, balance checks, card credential retrieval for checkout, and refunds.
+Manages the full lifecycle of the user's AgentCard: setup, funding, balance checks,
+card credential retrieval for checkout, refunds, and card rotation.
 
-> AgentCard issues prepaid virtual Visa cards for AI agents. Cards work at US-based merchants only. Value range: $5–$200 in $5 increments.
+> AgentCard issues prepaid virtual Visa cards for AI agents.
+> Cards work at **US-based merchants only**. Value range: **$5–$200** in $5 increments.
+
+---
 
 ## Pre-flight
 
-Ensure `agentcard` CLI is installed: `npm install -g agentcard`
+Ensure `agentcard` CLI is installed:
+```bash
+npm install -g agentcard
+```
 
-## Workflow
+---
 
-### 1. First-Time Setup
+## 1. First-Time Setup
 
 ```bash
-# Step 1: authenticate via magic link
+# Step 1: authenticate (one-time — magic link sent to user email)
 agentcard signup --email <user_email>
-# A magic link is sent to the user's email.
-# Ask the user to click it, then confirm before proceeding.
-
-# Step 2: create a prepaid card (returns a Stripe Checkout URL)
-agentcard create --amount <amount>
-# Valid amounts: 5, 10, 15, ... 200 (multiples of $5)
-# Present the Stripe URL to the user — they must complete payment to activate the card.
-# After user confirms payment, verify activation:
-agentcard list
-# Save the card ID to credentials for future use.
 ```
-
-### 2. Top Up (New Card)
+Ask the user to click the link in their email, then wait for confirmation before proceeding.
 
 ```bash
-# Each top-up creates a new card
+# Step 2: create prepaid card — returns a Stripe Checkout URL
 agentcard create --amount <amount>
-# Present Stripe URL to user, wait for payment confirmation.
+# Valid: 5, 10, 15 ... 200
+```
+Present the Stripe URL to the user. Wait for them to confirm payment is complete.
+
+```bash
+# Step 3: verify activation
 agentcard list
-# Save new card ID to credentials.
+# Capture the new card ID from output
 ```
 
-### 3. Balance & History
+**Write to USER.md immediately after activation:**
+```yaml
+cards:
+  - id: "<card_id>"
+    label: "<optional user label>"
+    created: "<YYYY-MM-DD>"
+    loaded: "$<amount>"
+```
+Confirm to user: "Your $X card is ready. Card ID saved."
+
+---
+
+## 2. Top Up (New Card)
+
+Same as steps 2–3 of setup. Each top-up creates a new card with a new card number.
+
+After activation, append to USER.md `cards` list:
+```yaml
+  - id: "<new_card_id>"
+    label: "Top-up <date>"
+    created: "<YYYY-MM-DD>"
+    loaded: "$<amount>"
+```
+
+> ⚠️ New card = new card number. Any SaaS subscriptions on the old card
+> will NOT transfer automatically. See Card Rotation section below.
+
+---
+
+## 3. Balance & Transaction History
 
 ```bash
 agentcard balance <card_id>
-# Returns: remaining balance + recent transaction history
-# Note: balance refresh may take 2-3 minutes after a transaction.
+# Returns: remaining balance + recent transaction list
+# Note: may take 2–3 minutes to reflect the latest transaction
 ```
 
-### 4. Retrieve Card Credentials for Checkout
+**After every balance check, run the low-balance warning:**
+
+```
+remaining_balance = <parsed from output>
+monthly_cost_estimate = sum of known recurring subscriptions on this card (from USER.md Purchase Log)
+
+if remaining_balance < max($20, 2 × approval_threshold):
+  → Warn: "Card balance is running low: $X remaining.
+           Consider topping up — a new $Y card takes only a minute to set up."
+  → If user has active subscriptions on this card:
+    → "Note: your [Spotify / X / Y] subscriptions use this card.
+       When it runs out, those will stop. Would you like to set up a new card and update them now?"
+```
+
+---
+
+## 4. Retrieve Card Credentials for Checkout
 
 ```bash
 agentcard details <card_id>
-# Returns: PAN, CVV, expiry date
-# SECURITY: Use these values only to fill checkout forms via browser-checkout skill.
-# Do NOT repeat card credentials in conversation. Do NOT log them.
+# Returns: PAN, CVV, expiry
 ```
 
-### 5. Refund
+**SECURITY:**
+- Invoke this command only inside the browser-checkout skill, immediately before form submission.
+- Parse PAN, CVV, expiry from stdout — treat as ephemeral variables.
+- Do NOT echo or log these values anywhere.
+- Do NOT pass them between skills as named parameters in conversation.
+
+---
+
+## 5. Card Rotation (when a card is depleted)
+
+When `agentcard balance` shows $0 (or near-zero) and the user wants to continue:
+
+**Step 1 — Create new card** (see Top Up section above).
+
+**Step 2 — Identify affected subscriptions:**
+```
+Scan USER.md Purchase Log for recurring entries using the depleted card ID.
+Present list to user:
+  "These subscriptions were using your old card and will now fail:
+   - Spotify ($X/month)
+   - Notion ($Y/month)
+   Would you like me to update the payment method on each of them?"
+```
+
+**Step 3 — Update payment method per platform (if user confirms):**
+For each affected subscription, trigger browser-checkout with task type `subscription-card-update`:
+```bash
+# browser-use task:
+# "Go to [platform] billing settings.
+#  Replace the saved card with: [new card details].
+#  Confirm the update was saved."
+```
+Log result per platform. If a platform update fails, report specifically which one and why.
+
+**Step 4 — Update USER.md:**
+Mark old card as depleted:
+```yaml
+cards:
+  - id: "<old_card_id>"
+    status: "depleted"
+    depleted_date: "<YYYY-MM-DD>"
+```
+
+---
+
+## 6. Refund
 
 ```bash
 agentcard refund <card_id> --amount <amount>
-# Automated refunds: up to $5 or 25% of card value (whichever is greater).
-# For larger refunds: inform user to contact support@agentcard.ai with card ID.
 ```
 
-### 6. Report Issues
+- Automated refunds: up to **$5 or 25% of card value** (whichever is greater).
+- For larger amounts: tell user to email support@agentcard.ai with the card ID.
+- Log refund attempt in USER.md Purchase Log.
+
+---
+
+## 7. Report Issues
 
 ```bash
 agentcard support --message "<description>"
-# Use for: declined transactions, CAPTCHA blocks, payment failures.
 ```
+Use for: declined transactions, CAPTCHA blocks, unexpected charges, payment failures.
+
+---
 
 ## Rules
 
-- Never expose PAN, CVV, or expiry in chat messages or logs.
-- Always confirm card activation via `agentcard list` after a Stripe payment before storing the card ID.
-- Always check balance before initiating a purchase — insufficient funds cause checkout failures.
-- If the user has multiple cards, ask which one to use or use the one with sufficient balance.
+- Card IDs are always written to USER.md `cards` field immediately after activation.
+- Never expose PAN, CVV, or expiry in conversation or logs.
+- If the user has multiple active cards, prefer the one with sufficient balance;
+  if multiple qualify, ask the user which to use.
+- Always verify activation via `agentcard list` before writing card ID to USER.md.
