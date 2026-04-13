@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "name": "Payment Assistant",
+  "emoji": "💳",
+  "description": "An autonomous payment agent that helps users search, compare, and purchase products within pre-authorized merchants and budget rules. Powered by AgentCard virtual Visa and cloud browser automation.",
+  "headline": "Search, compare, and buy — hands-free within your budget rules",
+  "category": "finance",
+  "author": "Community",
+  "tags": [
+    "payment",
+    "shopping",
+    "amazon",
+    "agentcard",
+    "automation"
+  ],
+  "skills": {
+    "inline": [
+      "agentcard",
+      "browser-checkout",
+      "payment-guard"
+    ]
+  },
+  "tools": {
+    "allow": [
+      "group:subagent"
+    ]
+  },
+  "suggested_prompts": [
+    "Set up my payment card",
+    "Check my card balance",
+    "Buy me a Logitech K380 keyboard on Amazon, budget $60",
+    "Show my recent purchases"
+  ],
+  "featured": false,
+  "trust_level": "community",
+  "languages": [],
+  "avatar_url": ""
+}
