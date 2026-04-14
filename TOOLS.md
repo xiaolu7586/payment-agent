@@ -55,11 +55,13 @@ When loading `BROWSER_USE_API_KEY` in skills:
 
 ---
 
-## Pre-Purchase Checklist
+## Pre-Purchase Checklist (in execution order)
 
-Before any purchase attempt, the agent verifies:
-1. `agentcard balance <id>` — sufficient funds
-2. `payment-guard` whitelist check — merchant is approved
-3. `payment-guard` threshold check — amount is within auto-approve limit
-4. Shipping address collected (physical goods only)
-5. Merchant browser profile loaded (login session ready)
+Before any purchase, the following checks run in this exact sequence:
+
+1. **Card exists** — `payment-guard` Phase 0: `cards` field in USER.md must be non-empty
+2. **Whitelist** — `payment-guard` Layer 1: merchant must be on approved list (if enabled)
+3. **Threshold** — `payment-guard` Layer 2: amount vs approval threshold
+4. **Shipping address** — `browser-checkout` Phase 0a: collected if physical goods
+5. **Merchant login** — `browser-checkout` Phase 0b: browser-use profile loaded or created
+6. **Card balance** — `browser-checkout` Phase 0c: sufficient funds confirmed via `agentcard balance`
