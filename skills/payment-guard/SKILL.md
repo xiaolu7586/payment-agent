@@ -4,7 +4,7 @@ description: "Use this skill before every purchase attempt. Validates whether a 
 license: MIT
 metadata:
   author: xiaolu7586
-  version: "0.3.0"
+  version: "0.4.0"
 ---
 
 # Payment Guard — Pre-Purchase Rule Engine
@@ -47,6 +47,40 @@ Identify the purchase type before running rules:
 | Tickets | Ticketmaster | No | Yes |
 
 Pass the scenario type to browser-checkout so it knows which Phase 0 context checks to run.
+
+---
+
+## Layer 0: US Merchant Validation (Hard System Constraint)
+
+**AgentCard only works with US-based merchants.** This is a hard technical limitation — the card will be declined at non-US checkout regardless of whitelist or budget settings.
+
+### How to detect a non-US merchant
+
+Flag the merchant as **likely non-US** if any of the following are true:
+
+| Signal | Examples |
+|--------|----------|
+| Country-code TLD | `.ca`, `.co.uk`, `.de`, `.fr`, `.co.jp`, `.com.au`, `.in`, `.mx`, `.es`, `.it` |
+| Known regional Amazon domain | `amazon.ca`, `amazon.co.uk`, `amazon.de`, `amazon.co.jp`, `amazon.com.au`, `amazon.com.mx`, `amazon.com.br`, `amazon.in`, `amazon.fr`, `amazon.it`, `amazon.es` |
+| Pricing currency other than USD | Site shows CAD, GBP, EUR, AUD, JPY, INR, etc. |
+| Explicit region indicator in URL | `/ca/`, `/uk/`, `/de/`, `/au/` path prefix |
+
+### Decision
+
+```
+non-US signal detected?
+  yes → HARD STOP. Respond:
+          "AgentCard only works with US merchants — [merchant] looks like a [country]
+           storefront. A US purchase card won't be accepted there.
+           If you meant the US version, I can switch to amazon.com instead.
+           Otherwise you'd need a different payment method for this merchant."
+        Offer to redirect to US equivalent if one exists (e.g. amazon.com).
+        Do not proceed until user confirms a US merchant.
+
+  no → proceed to Layer 1
+```
+
+> This check runs before both the whitelist and the threshold — there's no point validating rules for a merchant where payment is impossible.
 
 ---
 
@@ -93,6 +127,10 @@ purchase requested
   yes
        │
 classify scenario
+       │
+  US merchant?
+  no ──→ HARD STOP → warn user → offer US equivalent → wait for confirmation
+  yes
        │
 whitelist enabled?
   yes ──→ merchant on list? ──no──→ STOP (offer to add)
