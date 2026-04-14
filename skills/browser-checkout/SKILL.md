@@ -4,7 +4,7 @@ description: "Use this skill to execute the actual purchase after payment-guard 
 license: MIT
 metadata:
   author: xiaolu7586
-  version: "0.3.0"
+  version: "0.4.0"
   homepage: "https://cloud.browser-use.com"
 ---
 
@@ -13,13 +13,14 @@ metadata:
 Executes browser-based shopping workflows using browser-use.com cloud automation.
 
 > Only call this skill AFTER payment-guard has confirmed the transaction is approved.
+> By the time this skill runs, card existence is already guaranteed by payment-guard Phase 0.
 
 ---
 
-## Phase 0: Context Gathering (Before Every Purchase)
+## Phase 0: Context Gathering
 
 Context is collected lazily — only when the current purchase scenario requires it.
-Once collected, context is saved to USER.md and re-confirmed on subsequent uses.
+Once collected, saved to USER.md and re-confirmed on subsequent uses.
 
 ### 0a. Shipping Address (physical goods only — skip for SaaS, subscriptions, tickets, digital)
 
@@ -39,7 +40,7 @@ Case B — field is populated:
   → Never skip this re-confirmation for physical goods
 ```
 
-### 0b. Merchant Account / Browser Profile (skip for recurring subscription auto-renew)
+### 0b. Merchant Login / Browser Profile (skip for recurring subscription auto-renew)
 
 **Check USER.md `merchant_profiles.<merchant>` field:**
 
@@ -60,20 +61,22 @@ Case B — profile ID saved:
      return to Case A to re-authenticate
 ```
 
-### 0c. AgentCard (always)
+### 0c. Card Balance Check (always)
 
-**Check USER.md `cards` field:**
+> Card existence is already confirmed by payment-guard. This step only verifies
+> the selected card has sufficient balance for this specific purchase.
+
+```bash
+agentcard balance <card_id>
+```
 
 ```
-Case A — no cards:
-  → Pause purchase
-  → "You have no payment card set up. Set one up now?" 
-  → Trigger agentcard skill setup flow → return here when ready
-
-Case B — cards present:
-  → Run: agentcard balance <card_id>
-  → If balance >= purchase amount → proceed
-  → If balance < purchase amount → notify user, suggest top-up
+If balance >= estimated purchase amount → proceed
+If balance < estimated purchase amount:
+  → "Your card has $X remaining, which may not cover this purchase (~$Y).
+     Would you like to top up before continuing?"
+  → If user tops up → re-check balance → proceed
+  → If user declines → cancel and report
 ```
 
 ---
@@ -82,9 +85,17 @@ Case B — cards present:
 
 ```python
 from browser_use_sdk import BrowserUseClient
-import os
+import os, json
+from pathlib import Path
 
-client = BrowserUseClient(api_key=os.environ["BROWSER_USE_API_KEY"])
+# Load API key: env var first, fallback to .secrets/env.json
+api_key = os.environ.get("BROWSER_USE_API_KEY")
+if not api_key:
+    secrets = Path(".secrets/env.json")
+    if secrets.exists():
+        api_key = json.loads(secrets.read_text()).get("BROWSER_USE_API_KEY")
+
+client = BrowserUseClient(api_key=api_key)
 
 session = client.sessions.create(
     task=(
@@ -186,7 +197,7 @@ Append to USER.md Purchase Log:
 Report to user:
 - Order confirmation number
 - Final amount charged
-- Remaining card balance (run `agentcard balance <card_id>`)
+- Remaining card balance (`agentcard balance <card_id>`)
 
 **Balance warning** (run after every purchase):
 ```
@@ -215,7 +226,7 @@ If remaining_balance < max($20, 2 × approval_threshold):
 
 ## Security Rules
 
-- `agentcard details` is run via CLI shell call immediately before Phase 2b — not cached between sessions.
+- `agentcard details` is run via CLI immediately before Phase 2b — never cached between sessions.
 - PAN, CVV, expiry are cleared (`= ""`) immediately after the browser session completes.
 - Never include card values in conversation messages, logs, or USER.md.
-- browser-use task strings containing card values are session-scoped and not stored by this agent.
+- browser-use task strings containing card values are session-scoped and not persisted.
