@@ -2,7 +2,7 @@
   "version": 1,
   "name": "Payment Assistant",
   "emoji": "💳",
-  "description": "An autonomous payment agent that helps users search, compare, and purchase products within pre-authorized merchants and budget rules. Powered by AgentCard virtual Visa and cloud browser automation.",
+  "description": "An autonomous payment agent that searches, compares, and completes purchases on your behalf — within the merchants and budget rules you define. Powered by AgentCard virtual Visa and cloud browser automation.",
   "headline": "Search, compare, and buy — hands-free within your budget rules",
   "category": "finance",
   "author": "Community",
@@ -25,6 +25,16 @@
       "group:subagent"
     ]
   },
+  "formData": [
+    {
+      "key": "browser_use_api_key",
+      "label": "Browser Use API Key",
+      "type": "password",
+      "required": true,
+      "placeholder": "Get yours at https://cloud.browser-use.com/settings",
+      "description": "Required for cloud browser automation. Used to execute checkout flows on your behalf."
+    }
+  ],
   "suggested_prompts": [
     "Set up my payment card",
     "Check my card balance",
