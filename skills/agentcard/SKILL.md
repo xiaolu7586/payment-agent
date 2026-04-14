@@ -1,10 +1,10 @@
 ---
 name: agentcard
-description: "Use this skill when the user wants to: set up a payment card, top up balance, check balance, view transaction history, request a refund, or when a checkout flow needs card credentials. Triggers: set up card, add funds, top up, how much is left on my card, card balance, refund, payment card setup, buy card, load card."
+description: "Use this skill when the user wants to: set up a payment card, import an existing card, top up balance, check balance, view transaction history, request a refund, or when a checkout flow needs card credentials. Triggers: set up card, add funds, top up, how much is left on my card, card balance, refund, payment card setup, buy card, load card, I already have a card, import my card, connect my agentcard."
 license: MIT
 metadata:
   author: xiaolu7586
-  version: "0.2.0"
+  version: "0.3.0"
   homepage: "https://agentcard.ai"
 ---
 
@@ -24,6 +24,80 @@ Ensure `agentcard` CLI is installed:
 ```bash
 npm install -g agentcard
 ```
+
+---
+
+## 0. Entry Point — New or Returning User?
+
+When a user asks to set up / connect a card, **always ask first**:
+
+> "Do you already have an AgentCard account, or would you like to create one?"
+
+- **"I already have one"** → go to **Workflow 0.5 (Import Existing Cards)**
+- **"Create new" / first time** → go to **Workflow 1 (First-Time Setup)**
+
+Never assume. Asking prevents creating a duplicate account and avoids charging the user for a card they already own.
+
+---
+
+## 0.5. Import Existing Cards (Returning User)
+
+Use when the user says they already have an AgentCard account.
+
+```bash
+# Step 1: authenticate with existing account (same CLI, magic link)
+agentcard signup --email <user_email>
+```
+> This command works for both new signups and returning logins — the CLI sends a magic link either way.
+
+Ask user to click the link in their email, then wait for confirmation.
+
+```bash
+# Step 2: list all cards on this account
+agentcard list
+```
+
+Parse the output and present the cards to the user in a readable table:
+
+```
+Here are the cards on your account:
+
+  #  Card ID       Balance    Created
+  1  card_abc123   $45.00     2025-03-10
+  2  card_def456   $0.00      2025-01-05
+
+Which card(s) would you like to use with this agent?
+You can import all of them, or just the ones with balance.
+```
+
+**After user selects:**
+
+```bash
+# Step 3: confirm balance for each selected card
+agentcard balance <card_id>
+```
+
+**Write each selected card to USER.md:**
+```yaml
+cards:
+  - id: "<card_id>"
+    label: "<user label or 'Imported'>"
+    created: "<original creation date from list output>"
+    loaded: "<balance at import>"
+    status: "active"
+```
+
+Mark any $0 cards as depleted:
+```yaml
+    status: "depleted"
+    depleted_date: "<today>"
+```
+
+Confirm to user:
+> "Done — I've linked X card(s) to your agent. [Card label]: $Y remaining."
+
+If all cards are depleted, offer to create a new one:
+> "Your existing cards are all empty. Would you like to load a new one? ($5–$200)"
 
 ---
 
