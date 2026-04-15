@@ -40,5 +40,9 @@ merchant_profiles:
 
 ## Purchase Log
 
-# Automatically appended after each transaction attempt.
-# Format: [timestamp] | merchant | amount | status | order_id | note
+# Automatically appended after each transaction attempt (success, failure, blocked, refund).
+# Format: [ISO timestamp] | [event] | [merchant] | $[amount] | [card_id] | [status] | [detail]
+#
+# event values : purchase | blocked | cancelled | failed | refund | subscription
+# status values: success | declined | captcha | timeout | out_of_stock | price_changed | user_cancelled | guard_blocked | refunded
+# detail       : order_id for purchases, reason for blocks/failures, refund amount for refunds

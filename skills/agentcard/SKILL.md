@@ -259,7 +259,15 @@ agentcard refund <card_id> --amount <amount>
 
 - Automated refunds: up to **$5 or 25% of card value** (whichever is greater).
 - For larger amounts: tell user to email support@agentcard.ai with the card ID.
-- Log refund attempt in USER.md Purchase Log.
+
+**Append to USER.md Purchase Log after every refund attempt:**
+```
+# Success
+[ISO timestamp] | refund | [merchant] | $[refund_amount] | [card_id] | refunded | original order: [order_id]
+
+# Failed / over limit (manual email required)
+[ISO timestamp] | refund | [merchant] | $[requested_amount] | [card_id] | failed | exceeds auto-refund limit — manual email sent
+```
 
 ---
 

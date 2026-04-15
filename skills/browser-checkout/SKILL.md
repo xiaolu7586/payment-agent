@@ -189,47 +189,92 @@ pan = cvv = expiry = ""
 
 ---
 
-## Phase 3: Post-Purchase
+## Phase 3: Post-Purchase (Success)
 
+**Step 1 — Report to AgentCard's tracking server:**
 ```bash
 agentcard track-purchase \
-  --merchant "<merchant>" \
-  --amount "<final_amount>" \
-  --status "success"
+  --name "<item name>" \
+  --amount "<final_amount_in_dollars>" \
+  --store "<merchant domain>" \
+  --card-id "<card_id>" \
+  --intent "<what the user asked for>"
+```
+> CLI args: `--name`, `--amount`, `--store`, `--card-id`, `--intent`, `--incomplete` (flag for failures).
+> Do NOT use `--merchant` or `--status` — those don't exist.
+
+**Step 2 — Append to USER.md Purchase Log:**
+```
+[ISO timestamp] | purchase | [merchant] | $[final_amount] | [card_id] | success | [order_id]
 ```
 
-Append to USER.md Purchase Log:
+For subscription purchases, use event type `subscription` and add recurrence info in detail:
 ```
-[ISO timestamp] | [merchant] | $[amount] | success | [order_id]
+[ISO timestamp] | subscription | [merchant] | $[amount]/month | [card_id] | success | [order_id] plan=[plan_name]
 ```
 
-Report to user:
+**Step 3 — Report to user:**
 - Order confirmation number
 - Final amount charged
-- Remaining card balance (`agentcard balance <card_id>`)
+- Estimated card balance remaining
 
-**Balance warning** (run after every purchase):
+**Step 4 — Balance warning:**
 ```
-If remaining_balance < max($20, 2 × approval_threshold):
-  → "Card balance is $X. Consider topping up before your next purchase."
-  → If recurring subscriptions detected on this card:
-    → "Your [service] subscription will stop working when this card runs out."
+effective_balance = (real-time from agentcard balance) OR (card.loaded − sum of Purchase Log for card_id)
+
+If effective_balance < max($20, 2 × approval_threshold):
+  → "Card balance is ~$X. Consider topping up before your next purchase."
+  → Scan Purchase Log for subscription entries on this card:
+    → "Your [Spotify / Notion] subscriptions use this card and will fail when it runs out."
 ```
 
 ---
 
-## Failure Handling
+## Failure Logging
+
+**Every failure must be logged to USER.md Purchase Log** — failures are just as important as
+successes for balance estimation and debugging.
+
+```
+# Card declined
+[ISO timestamp] | failed | [merchant] | $[amount] | [card_id] | declined | possible balance issue
+
+# CAPTCHA / bot detection
+[ISO timestamp] | failed | [merchant] | $[amount] | [card_id] | captcha | reported to agentcard support
+
+# Checkout timeout
+[ISO timestamp] | failed | [merchant] | $[amount] | [card_id] | timeout | cart may still be filled
+
+# Out of stock (item not available at checkout)
+[ISO timestamp] | failed | [merchant] | $[amount] | [card_id] | out_of_stock | [item name]
+
+# Price changed above threshold
+[ISO timestamp] | failed | [merchant] | $[new_amount] | [card_id] | price_changed | was $[original], exceeded threshold
+```
+
+Also call `agentcard track-purchase` with `--incomplete` flag for all failures:
+```bash
+agentcard track-purchase \
+  --name "<item>" \
+  --amount "<amount>" \
+  --store "<merchant>" \
+  --card-id "<card_id>" \
+  --incomplete \
+  --intent "<what user asked for>"
+```
+
+## Failure Actions
 
 | Failure | Action |
 |---------|--------|
-| CAPTCHA encountered | Stop. Report to user. Run `agentcard support`. Do NOT retry silently. |
-| Card declined | Run `agentcard balance`. Report reason. Do not retry without instruction. |
-| Item out of stock | Report. Offer to search for alternatives (re-run Phase 1). |
-| Price changed between Phase 1 and Phase 2 | Surface new price. Re-run payment-guard threshold check. |
-| Final price exceeds threshold | Pause and escalate — even if Phase 1 price was within threshold. |
-| Browser profile session expired | Notify user. Re-run Phase 0b Case A to re-authenticate. |
-| Checkout timeout | Report. Do NOT retry without explicit user instruction. |
-| Phase 2b fails after cart is filled | Report. Advise user to check their [merchant] cart — item may still be there. |
+| CAPTCHA encountered | Stop. Report to user. Run `agentcard support --message ... --card-id ...`. Log as `captcha`. |
+| Card declined | Run `agentcard balance`. Report to user. Log as `declined`. Trigger card rotation if balance is low. |
+| Item out of stock | Report. Offer alternatives (re-run Phase 1). Log as `out_of_stock`. |
+| Price changed between Phase 1 and Phase 2 | Surface new price. Re-run payment-guard threshold check. Log as `price_changed`. |
+| Final price exceeds threshold | Pause and escalate. Log as `price_changed`. |
+| Browser profile session expired | Notify user. Re-run Phase 0b Case A. Do NOT log as failure — resume after re-auth. |
+| Checkout timeout | Report. Do NOT retry without explicit instruction. Log as `timeout`. |
+| Phase 2b fails after cart is filled | Report. Warn user item may still be in cart. Log as `failed`. |
 
 ---
 

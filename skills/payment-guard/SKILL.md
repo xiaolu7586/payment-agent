@@ -153,10 +153,24 @@ whitelist enabled?
 
 ## Logging
 
-After every decision, append to USER.md Purchase Log:
+Append to USER.md Purchase Log after every guard decision (approved, blocked, or cancelled).
+Use the unified format — **always include card_id** even if the card wasn't charged:
+
 ```
-[ISO timestamp] | [merchant] | $[amount] | [approved/blocked/cancelled/pending] | [reason]
+# Approved (handed off to browser-checkout — final result logged there)
+[ISO timestamp] | purchase   | [merchant] | $[amount] | [card_id] | guard_approved | threshold=$[threshold]
+
+# Blocked by whitelist
+[ISO timestamp] | blocked    | [merchant] | $[amount] | [card_id] | guard_blocked  | not on whitelist
+
+# Blocked by US merchant check
+[ISO timestamp] | blocked    | [merchant] | $[amount] | [card_id] | guard_blocked  | non-US merchant
+
+# User cancelled at threshold gate
+[ISO timestamp] | cancelled  | [merchant] | $[amount] | [card_id] | user_cancelled | threshold=$[threshold]
 ```
+
+> If no card is active yet (Phase 0 hard stop), omit card_id field (use `—`).
 
 ---
 
