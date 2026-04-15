@@ -73,28 +73,35 @@ You can import all of them, or just the ones with balance.
 **After user selects:**
 
 ```bash
-# Step 3: confirm balance for each selected card
+# Step 3: check balance for each selected card
 agentcard balance <card_id>
 ```
+
+Parse the output using the same dual-track logic as Workflow 3:
+- If real-time balance is shown → use it as `loaded` in USER.md
+- If "Real-time balance is not available" → use `Amount` from `agentcard list` as `loaded` (original denomination)
 
 **Write each selected card to USER.md:**
 ```yaml
 cards:
   - id: "<card_id>"
     label: "<user label or 'Imported'>"
-    created: "<original creation date from list output>"
-    loaded: "<balance at import>"
+    created: "<creation date from list output>"
+    loaded: "$<real-time balance if available, else original denomination>"
     status: "active"
 ```
 
-Mark any $0 cards as depleted:
+Mark cards shown as $0 or expired in `agentcard list` as depleted:
 ```yaml
     status: "depleted"
     depleted_date: "<today>"
 ```
 
-Confirm to user:
-> "Done — I've linked X card(s) to your agent. [Card label]: $Y remaining."
+Confirm to user — if real-time balance available:
+> "Done — I've linked your card (last 4: XXXX): $Y available."
+
+If only denomination known:
+> "Done — I've linked your $X card. If it's been used before, actual remaining balance may be lower — I'll track purchases from here on."
 
 If all cards are depleted, offer to create a new one:
 > "Your existing cards are all empty. Would you like to load a new one? ($5–$200)"
@@ -155,22 +162,39 @@ After activation, append to USER.md `cards` list:
 
 ```bash
 agentcard balance <card_id>
-# Returns: remaining balance + recent transaction list
-# Note: may take 2–3 minutes to reflect the latest transaction
 ```
 
-**After every balance check, run the low-balance warning:**
+**The API returns `availableBalanceCents` when supported by the card — use it if present.
+Fall back to Purchase Log estimate if null.**
 
 ```
-remaining_balance = <parsed from output>
-monthly_cost_estimate = sum of known recurring subscriptions on this card (from USER.md Purchase Log)
+Parse agentcard balance output:
 
-if remaining_balance < max($20, 2 × approval_threshold):
-  → Warn: "Card balance is running low: $X remaining.
-           Consider topping up — a new $Y card takes only a minute to set up."
+Case A — "Available balance: $X" is printed:
+  → Use this as the authoritative real-time balance.
+  → Also display transaction list if shown.
+
+Case B — "Real-time balance is not available for this card." is printed:
+  → availableBalanceCents is null for this card type.
+  → Estimate from Purchase Log:
+      estimated_balance = card.loaded (USER.md) − sum of approved purchases logged for this card_id
+  → Tell user:
+     "Estimated balance: ~$X (real-time balance not available for this card —
+      calculated from purchases tracked in this agent)"
+  → If the card was used outside this agent, the estimate may be inaccurate.
+```
+
+**Low-balance warning (run after every purchase regardless of which case):**
+
+```
+effective_balance = real-time balance (Case A) OR estimated balance (Case B)
+
+if effective_balance < max($20, 2 × approval_threshold):
+  → Warn: "Your card balance is running low (~$X remaining).
+           Consider topping up — a new card takes only a minute to set up."
   → If user has active subscriptions on this card:
-    → "Note: your [Spotify / X / Y] subscriptions use this card.
-       When it runs out, those will stop. Would you like to set up a new card and update them now?"
+    → "Note: your [Spotify / Notion] subscriptions use this card.
+       When it runs out, those will fail. Set up a new card and update them now?"
 ```
 
 ---

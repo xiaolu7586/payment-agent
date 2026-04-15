@@ -70,14 +70,23 @@ Case B — profile ID saved:
 agentcard balance <card_id>
 ```
 
+Determine effective balance using dual-track logic:
+- **"Available balance: $X" shown** → use that figure (real-time)
+- **"Real-time balance is not available"** → estimate:
+  `effective_balance = card.loaded (USER.md) − sum of Purchase Log entries for this card`
+
 ```
-If balance >= estimated purchase amount → proceed
-If balance < estimated purchase amount:
-  → "Your card has $X remaining, which may not cover this purchase (~$Y).
+If effective_balance >= estimated purchase amount → proceed
+If effective_balance < estimated purchase amount:
+  → "Your card has ~$X remaining, which may not cover this purchase (~$Y).
      Would you like to top up before continuing?"
-  → If user tops up → re-check balance → proceed
+  → If user tops up → add new card → proceed
   → If user declines → cancel and report
 ```
+
+> If checkout fails with a card decline despite sufficient estimated balance,
+> treat it as a balance discrepancy (card may have been used outside this agent)
+> and trigger card rotation (agentcard Workflow 5).
 
 ---
 
