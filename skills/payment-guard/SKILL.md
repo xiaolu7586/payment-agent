@@ -27,6 +27,13 @@ Before any other check, read USER.md `cards` field.
 → Only after a card is successfully created and written to USER.md,
   offer to resume the original purchase request.
 
+**If exactly one active card exists → use it. Record `card_id` for all downstream steps.**
+
+**If multiple active cards exist → ask user:**
+> "You have [N] cards: [Card A: $X remaining] [Card B: $Y remaining]. Which would you like to use for this purchase?"
+> Default suggestion: the card with the highest estimated balance.
+> Save the selected `card_id` and pass it to browser-checkout.
+
 **If at least one active card exists → proceed to Pre-Guard.**
 
 > Note: The soft reminder (no card, non-purchase context) is handled in SOUL.md.
@@ -45,6 +52,11 @@ Identify the purchase type before running rules:
 | Subscription (new) | Spotify, Netflix | No | Yes |
 | Subscription (recurring, card saved) | Auto-renew | No | No |
 | Tickets | Ticketmaster | No | Yes |
+
+**How to detect "Subscription (recurring, card saved)":**
+Scan USER.md Purchase Log for `subscription` entries where `merchant` matches the current merchant
+AND `card_id` matches the active card AND `status: success`. If found → classify as recurring auto-renew
+(skip merchant login and shipping). If not found → classify as new subscription.
 
 Pass the scenario type to browser-checkout so it knows which Phase 0 context checks to run.
 

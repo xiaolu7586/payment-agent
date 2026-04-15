@@ -93,20 +93,27 @@ If effective_balance < estimated purchase amount:
 ## Phase 1: Search & Compare
 
 ```python
-from browser_use_sdk import BrowserUseClient
-import os, json
+from browser_use_sdk import BrowserUse, SessionSettings
+from uuid import UUID
+import os, json, subprocess
 from pathlib import Path
 
 # Load API key: env var first, fallback to .secrets/env.json
 api_key = os.environ.get("BROWSER_USE_API_KEY")
 if not api_key:
-    secrets = Path(".secrets/env.json")
-    if secrets.exists():
-        api_key = json.loads(secrets.read_text()).get("BROWSER_USE_API_KEY")
+    secrets_file = Path(".secrets/env.json")
+    if secrets_file.exists():
+        api_key = json.loads(secrets_file.read_text()).get("BROWSER_USE_API_KEY")
 
-client = BrowserUseClient(api_key=api_key)
+client = BrowserUse(api_key=api_key)
 
-session = client.sessions.create(
+# profile_id from USER.md merchant_profiles (UUID string)
+settings = SessionSettings(
+    profile_id=UUID(merchant_profile_id) if merchant_profile_id else None,
+    proxy_country_code="us"   # AgentCard is US-only; keep proxy in US
+)
+
+result = client.run(
     task=(
         f"Go to {merchant_url}. "
         f"Search for: {product_description}. "
@@ -114,10 +121,9 @@ session = client.sessions.create(
         f"Return: product name, exact current price, product URL, and availability. "
         f"Do not add to cart yet."
     ),
-    model="claude-sonnet-4-6",
-    profile_id=merchant_profile_id   # from USER.md merchant_profiles
+    llm="claude-sonnet-4-5",
+    session_settings=settings
 )
-result = session.run()
 ```
 
 Present to user: product name, price, URL.
@@ -130,21 +136,21 @@ Present to user: product name, price, URL.
 ### Step 2a — Fill cart and get final price
 
 ```python
-session = client.sessions.create(
+result_2a = client.run(
     task=(
-        f"Using the current session, go to {product_url}. "
+        f"Go to {product_url}. "
         f"Add the item to cart and proceed to checkout. "
         f"Fill in shipping details: "
         f"Name: {shipping_name}, "
         f"Address: {shipping_line1} {shipping_line2}, "
         f"{shipping_city} {shipping_state} {shipping_zip}, {shipping_country}. "
-        f"STOP before entering payment. "
+        f"STOP before entering any payment information. "
         f"Return the final order total shown (including tax and shipping)."
     ),
-    model="claude-sonnet-4-6",
-    profile_id=merchant_profile_id
+    llm="claude-sonnet-4-5",
+    session_settings=settings
 )
-final_price = session.run()
+final_price = result_2a  # parse dollar amount from result
 ```
 
 **Mandatory final price confirmation:**
@@ -164,27 +170,31 @@ Retrieve card credentials immediately before this step via CLI:
 # Run in shell, capture stdout
 agentcard details <card_id>
 # Parse output lines to extract:
-#   PAN:    <16-digit number>
-#   Expiry: MM/YY
-#   CVV:    <3-digit number>
-# Store as short-lived local variables — not in conversation, not in logs
+#   Number:  <16-digit number>  → pan
+#   Expiry:  MM/YYYY            → expiry
+#   CVV:     <3-digit number>   → cvv
 ```
 
+Pass credentials via `secrets=` — **never put card values in the task string**.
+The browser agent references them as `{{pan}}`, `{{cvv}}`, `{{expiry}}` — they are
+injected by the browser-use runtime and never appear in logs or task text.
+
 ```python
-session = client.sessions.create(
+result_2b = client.run(
     task=(
-        f"Fill in payment details: "
-        f"Card number: {pan}, Expiry: {expiry}, CVV: {cvv}. "
-        f"Submit the order. "
-        f"Return: order confirmation number and final amount charged."
+        "Fill in the payment form with: "
+        "Card number: {{pan}}, Expiry: {{expiry}}, CVV: {{cvv}}. "
+        "Submit the order. "
+        "Return: order confirmation number and final amount charged."
     ),
-    model="claude-sonnet-4-6",
-    profile_id=merchant_profile_id
+    llm="claude-sonnet-4-5",
+    session_settings=settings,
+    secrets={"pan": pan, "cvv": cvv, "expiry": expiry}  # injected at runtime, not logged
 )
-order_result = session.run()
 
 # Immediately clear card values from scope
 pan = cvv = expiry = ""
+order_result = result_2b
 ```
 
 ---

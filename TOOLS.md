@@ -55,6 +55,30 @@ When loading `BROWSER_USE_API_KEY` in skills:
 
 ---
 
+## Purchase History
+
+When the user asks to see their purchase history, recent transactions, or spending summary:
+
+1. Read USER.md Purchase Log section
+2. Parse all pipe-delimited lines
+3. Present as a readable table, most recent first:
+
+```
+Recent Purchases:
+
+Date        Merchant     Amount   Status    Detail
+──────────────────────────────────────────────────────
+2026-04-14  OpenAI       $20.00   ✅ success  order #abc123
+2026-04-12  Amazon       $45.99   ✅ success  order #xyz789
+2026-04-10  Spotify      $9.99    ✅ success  subscription monthly
+2026-04-08  Amazon.ca    —        🚫 blocked  non-US merchant
+```
+
+- Show emoji for status: ✅ success, 🚫 blocked/guard_blocked, ❌ failed/declined, 🔄 refunded, ⚠️ cancelled
+- If user asks for a total spent: sum all `purchase` and `subscription` rows with `success` status
+- If user asks about a specific merchant: filter by merchant column
+- Never show card numbers — only card_id (last 8 chars) if detail is needed
+
 ## Pre-Purchase Checklist (in execution order)
 
 Before any purchase, the following checks run in this exact sequence:
