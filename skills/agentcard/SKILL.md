@@ -4,7 +4,7 @@ description: "Use this skill when the user wants to: set up a payment card, impo
 license: MIT
 metadata:
   author: xiaolu7586
-  version: "0.3.0"
+  version: "0.4.0"
   homepage: "https://agentcard.ai"
 ---
 
@@ -62,9 +62,9 @@ Parse the output and present the cards to the user in a readable table:
 ```
 Here are the cards on your account:
 
-  #  Card ID       Balance    Created
-  1  card_abc123   $45.00     2025-03-10
-  2  card_def456   $0.00      2025-01-05
+  #  Card ID       Amount     Status    Purchased
+  1  card_abc123   $45.00     active    2025-03-10
+  2  card_def456   $50.00     active    2025-01-05
 
 Which card(s) would you like to use with this agent?
 You can import all of them, or just the ones with balance.
@@ -136,6 +136,7 @@ cards:
     label: "<optional user label>"
     created: "<YYYY-MM-DD>"
     loaded: "$<amount>"
+    status: "active"
 ```
 Confirm to user: "Your $X card is ready. Card ID saved."
 
@@ -151,6 +152,7 @@ After activation, append to USER.md `cards` list:
     label: "Top-up <date>"
     created: "<YYYY-MM-DD>"
     loaded: "$<amount>"
+    status: "active"
 ```
 
 > ⚠️ New card = new card number. Any SaaS subscriptions on the old card
@@ -203,14 +205,21 @@ if effective_balance < max($20, 2 × approval_threshold):
 
 ```bash
 agentcard details <card_id>
-# Returns: PAN, CVV, expiry
+# Actual output (verified):
+#   Number:  <16-digit number>    → pan          (field label is "Number:", NOT "PAN:")
+#   CVV:     <3-digit number>     → cvv
+#   Expiry:  MM/YYYY              → e.g. "02/2033"  (MM/YYYY, NOT MM/YY)
+#   Amount:  $XX.00               → denomination (ignore for credential use)
+#
+# Also derive: expiry_short = MM/YY (e.g. "02/33") for forms that expect short format
 ```
 
 **SECURITY:**
-- Invoke this command only inside the browser-checkout skill, immediately before form submission.
-- Parse PAN, CVV, expiry from stdout — treat as ephemeral variables.
+- Invoke this command only inside the browser-checkout skill, immediately before Phase 2b.
+- Parse Number/CVV/Expiry from stdout — store as ephemeral local variables only.
+- Pass to browser-use via `secrets=` dict, NOT in the task string.
+- Clear all four variables (`pan`, `cvv`, `expiry`, `expiry_short`) immediately after `client.sessions.stop()`.
 - Do NOT echo or log these values anywhere.
-- Do NOT pass them between skills as named parameters in conversation.
 
 ---
 
@@ -231,20 +240,48 @@ Present list to user:
 ```
 
 **Step 3 — Update payment method per platform (if user confirms):**
-For each affected subscription, trigger browser-checkout with task type `subscription-card-update`:
-```bash
-# browser-use task:
-# "Go to [platform] billing settings.
-#  Replace the saved card with: [new card details].
-#  Confirm the update was saved."
+
+For each affected subscription, retrieve new card credentials (agentcard Workflow 4) and
+run a browser-use task to update billing settings:
+
+```python
+from browser_use_sdk import BrowserUse
+# (client already initialised with api_key)
+
+# Get new card credentials via CLI immediately before this call
+# (agentcard details <new_card_id> → pan, cvv, expiry, expiry_short)
+
+update_session = client.sessions.create(
+    profile_id=merchant_profile_id,   # existing login profile for this merchant
+    proxy_country_code="us",
+    keep_alive=True
+)
+result = client.run(
+    task=(
+        f"Go to {merchant_billing_url}. "
+        f"Update the saved payment method to a new card. "
+        f"Card number: {{{{pan}}}}, Expiry: {{{{expiry}}}}, CVV: {{{{cvv}}}}. "
+        f"Confirm the update was saved. "
+        f"Return: confirmation message or screenshot description."
+    ),
+    llm="claude-sonnet-4-5",
+    session_id=str(update_session.id),
+    secrets={"pan": pan, "cvv": cvv, "expiry": expiry, "expiry_short": expiry_short}
+)
+client.sessions.stop(str(update_session.id))
+pan = cvv = expiry = expiry_short = ""
 ```
+
 Log result per platform. If a platform update fails, report specifically which one and why.
 
 **Step 4 — Update USER.md:**
-Mark old card as depleted:
+Mark old card as depleted (preserve all other fields):
 ```yaml
 cards:
   - id: "<old_card_id>"
+    label: "<original label>"
+    created: "<original date>"
+    loaded: "<original amount>"
     status: "depleted"
     depleted_date: "<YYYY-MM-DD>"
 ```

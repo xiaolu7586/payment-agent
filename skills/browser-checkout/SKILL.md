@@ -4,7 +4,7 @@ description: "Use this skill to execute the actual purchase after payment-guard 
 license: MIT
 metadata:
   author: xiaolu7586
-  version: "0.4.0"
+  version: "0.5.0"
   homepage: "https://cloud.browser-use.com"
 ---
 
@@ -44,21 +44,60 @@ Case B — field is populated:
 
 **Check USER.md `merchant_profiles.<merchant>` field:**
 
-```
-Case A — no profile saved:
-  → Tell user: "I need to log in to [merchant] once on your behalf.
-     I will open a browser session — please complete the login.
-     Your session will be saved so this is a one-time step."
-  → Create browser-use profile for this merchant
-  → User completes login
-  → Save returned Profile ID to USER.md: merchant_profiles.<merchant>
-  → Proceed
+**Case A — no profile saved (first login to this merchant):**
 
-Case B — profile ID saved:
-  → Tell user: "Using your saved [merchant] session."
-  → Load profile → proceed
-  → If session turns out expired mid-checkout → notify user →
-     return to Case A to re-authenticate
+```python
+from browser_use_sdk import BrowserUse
+import os, json
+from pathlib import Path
+
+api_key = os.environ.get("BROWSER_USE_API_KEY") or \
+    json.loads(Path(".secrets/env.json").read_text()).get("BROWSER_USE_API_KEY")
+client = BrowserUse(api_key=api_key)
+
+# 1. Create a named profile for this merchant
+profile = client.profiles.create(name=f"{merchant}-profile")
+profile_id = str(profile.id)
+
+# 2. Open a live browser session so user can log in
+login_session = client.sessions.create(
+    profile_id=profile_id,
+    start_url=f"https://{merchant_domain}/signin",
+    proxy_country_code="us",
+    keep_alive=True
+)
+session_id = str(login_session.id)
+
+# 3. Get a shareable URL for the user to interact with
+share = client.sessions.create_share(session_id)
+```
+
+Tell user:
+> "I've opened a browser session for [merchant]. Please log in at:
+>  **[share.share_url]**
+>  Once you've signed in, let me know and I'll continue."
+
+Wait for user confirmation, then:
+
+```python
+# 4. Close the login session (cookies now saved to profile)
+client.sessions.stop(session_id)
+```
+
+Save to USER.md:
+```yaml
+merchant_profiles:
+  <merchant>: "<profile_id>"
+```
+
+**Case B — profile ID saved:**
+
+Tell user: "Using your saved [merchant] session."
+The `profile_id` will be passed to the checkout session in Phase 1/2.
+
+```
+→ If session turns out expired mid-checkout (login redirect):
+  → Notify user → delete old profile entry from USER.md → re-run Case A
 ```
 
 ### 0c. Card Balance Check (always)
@@ -92,28 +131,31 @@ If effective_balance < estimated purchase amount:
 
 ## Phase 1: Search & Compare
 
+> **Session architecture:** Phases 1, 2a, and 2b all run inside a **single persistent
+> browser session** (`keep_alive=True`). This preserves page state between steps —
+> the cart filled in 2a is still there when 2b runs payment. Never use separate
+> `client.run()` calls without a shared `session_id` for multi-step checkout.
+
 ```python
-from browser_use_sdk import BrowserUse, SessionSettings
-from uuid import UUID
-import os, json, subprocess
+from browser_use_sdk import BrowserUse
+import os, json, subprocess, re
 from pathlib import Path
 
-# Load API key: env var first, fallback to .secrets/env.json
-api_key = os.environ.get("BROWSER_USE_API_KEY")
-if not api_key:
-    secrets_file = Path(".secrets/env.json")
-    if secrets_file.exists():
-        api_key = json.loads(secrets_file.read_text()).get("BROWSER_USE_API_KEY")
-
+# Load API key
+api_key = os.environ.get("BROWSER_USE_API_KEY") or \
+    json.loads(Path(".secrets/env.json").read_text()).get("BROWSER_USE_API_KEY")
 client = BrowserUse(api_key=api_key)
 
-# profile_id from USER.md merchant_profiles (UUID string)
-# IMPORTANT: SessionSettings uses camelCase alias 'profileId' — snake_case is silently ignored
-settings = SessionSettings(**{
-    'profileId': merchant_profile_id,   # str UUID from USER.md
-    'proxyCountryCode': 'us',           # AgentCard is US-only; keep proxy in US
-}) if merchant_profile_id else SessionSettings(**{'proxyCountryCode': 'us'})
+# Create a persistent browser session (shared across Phase 1, 2a, 2b)
+# sessions.create() takes profile_id as a plain string — no camelCase alias needed
+live_session = client.sessions.create(
+    profile_id=merchant_profile_id,   # str UUID from USER.md, or None if no profile yet
+    proxy_country_code="us",          # AgentCard is US-only; keep proxy in US
+    keep_alive=True                   # preserve browser state between tasks
+)
+session_id = str(live_session.id)
 
+# Phase 1: Search
 result = client.run(
     task=(
         f"Go to {merchant_url}. "
@@ -123,7 +165,7 @@ result = client.run(
         f"Do not add to cart yet."
     ),
     llm="claude-sonnet-4-5",
-    session_settings=settings
+    session_id=session_id    # runs inside the live session
 )
 ```
 
@@ -133,6 +175,9 @@ Present to user: product name, price, URL.
 ---
 
 ## Phase 2: Checkout
+
+> Both steps run in the **same `session_id`** created in Phase 1.
+> The browser stays open between 2a and 2b — page state is preserved.
 
 ### Step 2a — Fill cart and get final price
 
@@ -149,7 +194,7 @@ result_2a = client.run(
         f"Return the final order total shown (including tax and shipping)."
     ),
     llm="claude-sonnet-4-5",
-    session_settings=settings
+    session_id=session_id    # same live session — browser is still at checkout
 )
 final_price = result_2a  # parse dollar amount from result
 ```
@@ -171,9 +216,9 @@ Retrieve card credentials immediately before this step via CLI:
 # Run in shell, capture stdout
 agentcard details <card_id>
 # Actual output field names (verified):
-#   Number:  <16-digit number>   → pan
+#   Number:  <16-digit number>   → pan   (field label is "Number:", NOT "PAN:")
 #   CVV:     <3-digit number>    → cvv
-#   Expiry:  MM/YYYY             → e.g. "02/2033"  ← format is MM/YYYY, not MM/YY
+#   Expiry:  MM/YYYY             → e.g. "02/2033"  ← MM/YYYY format, NOT MM/YY
 #
 # Derive short expiry for forms that expect MM/YY:
 #   expiry_short = MM/YY  (e.g. "02/33")
@@ -187,24 +232,27 @@ injected by the browser-use runtime and never appear in logs or task text.
 ```python
 result_2b = client.run(
     task=(
-        "Fill in the payment form with: "
-        "Card number: {{pan}}, Expiry: {{expiry}}, CVV: {{cvv}}. "
+        "The checkout page is already open. "
+        "Enter payment details: card number {{pan}}, expiry {{expiry}} or {{expiry_short}}, CVV {{cvv}}. "
         "Submit the order. "
         "Return: order confirmation number and final amount charged."
     ),
     llm="claude-sonnet-4-5",
-    session_settings=settings,
+    session_id=session_id,   # same live session — browser is at payment step
     secrets={
         "pan": pan,
         "cvv": cvv,
         "expiry": expiry,              # MM/YYYY e.g. "02/2033"
-        "expiry_short": expiry_short,  # MM/YY   e.g. "02/33" — for forms that expect short format
-    }  # injected at runtime, not logged
+        "expiry_short": expiry_short,  # MM/YY   e.g. "02/33"
+    }
 )
 
-# Immediately clear card values from scope
-pan = cvv = expiry = ""
+# Immediately clear all card values from scope
+pan = cvv = expiry = expiry_short = ""
 order_result = result_2b
+
+# Close the live session
+client.sessions.stop(session_id)
 ```
 
 ---
@@ -285,22 +333,25 @@ agentcard track-purchase \
 
 ## Failure Actions
 
+**In all failure cases: call `client.sessions.stop(session_id)` before returning.**
+
 | Failure | Action |
 |---------|--------|
-| CAPTCHA encountered | Stop. Report to user. Run `agentcard support --message ... --card-id ...`. Log as `captcha`. |
-| Card declined | Run `agentcard balance`. Report to user. Log as `declined`. Trigger card rotation if balance is low. |
-| Item out of stock | Report. Offer alternatives (re-run Phase 1). Log as `out_of_stock`. |
-| Price changed between Phase 1 and Phase 2 | Surface new price. Re-run payment-guard threshold check. Log as `price_changed`. |
-| Final price exceeds threshold | Pause and escalate. Log as `price_changed`. |
-| Browser profile session expired | Notify user. Re-run Phase 0b Case A. Do NOT log as failure — resume after re-auth. |
-| Checkout timeout | Report. Do NOT retry without explicit instruction. Log as `timeout`. |
-| Phase 2b fails after cart is filled | Report. Warn user item may still be in cart. Log as `failed`. |
+| CAPTCHA encountered | Stop session. Report to user. Run `agentcard support --message ... --card-id ...`. Log as `captcha`. |
+| Card declined | Stop session. Run `agentcard balance`. Report to user. Log as `declined`. Trigger card rotation if balance is low. |
+| Item out of stock | Stop session. Report. Offer alternatives (re-run Phase 1 with new session). Log as `out_of_stock`. |
+| Price changed between Phase 1 and Phase 2 | Stop session. Surface new price. Re-run payment-guard check. Log as `price_changed`. |
+| Final price exceeds threshold | Stop session. Pause and escalate. Log as `price_changed`. |
+| Browser profile session expired | Stop session. Notify user. Re-run Phase 0b Case A to re-authenticate. Start fresh session after. Do NOT log as failure. |
+| Checkout timeout | Stop session. Report. Do NOT retry without explicit instruction. Log as `timeout`. |
+| Phase 2b fails after cart is filled | Stop session. Report. Warn user item may still be in cart at [merchant]. Log as `failed`. |
 
 ---
 
 ## Security Rules
 
 - `agentcard details` is run via CLI immediately before Phase 2b — never cached between sessions.
-- PAN, CVV, expiry are cleared (`= ""`) immediately after the browser session completes.
+- All four card variables (`pan`, `cvv`, `expiry`, `expiry_short`) are cleared immediately after `client.sessions.stop()`.
 - Never include card values in conversation messages, logs, or USER.md.
-- browser-use task strings containing card values are session-scoped and not persisted.
+- Card values are passed via `secrets=` dict — they are injected by the browser-use runtime and do not appear in task strings, API logs, or browser history.
+- The live session (`session_id`) is stopped immediately after Phase 2b completes or fails.
