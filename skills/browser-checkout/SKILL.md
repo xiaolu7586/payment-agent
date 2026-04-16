@@ -208,6 +208,7 @@ try:
     )
 except Exception as e:
     client.sessions.stop(session_id)
+    # Log failure (see Failure Logging section) and report to user
     raise
 final_price = result_2a  # parse dollar amount from result string
 ```

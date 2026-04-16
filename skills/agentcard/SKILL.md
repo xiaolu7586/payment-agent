@@ -322,9 +322,14 @@ agentcard refund <card_id> --amount <amount>
 ## 7. Report Issues
 
 ```bash
-agentcard support --message "<description>"
+agentcard support \
+  --message "<description>" \
+  --card-id "<card_id>" \    # include when issue is card-related
+  --url "<url>" \            # optional — URL where issue occurred
+  --error "<error>"          # optional — error message or code
 ```
 Use for: declined transactions, CAPTCHA blocks, unexpected charges, payment failures.
+`--card-id` is available and should be included whenever a specific card is involved.
 
 ---
 
