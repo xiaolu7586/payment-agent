@@ -191,21 +191,25 @@ Present to user: product name, price, URL.
 ### Step 2a — Fill cart and get final price
 
 ```python
-result_2a = client.run(
-    task=(
-        f"Go to {product_url}. "
-        f"Add the item to cart and proceed to checkout. "
-        f"Fill in shipping details: "
-        f"Name: {shipping_name}, "
-        f"Address: {shipping_line1} {shipping_line2}, "
-        f"{shipping_city} {shipping_state} {shipping_zip}, {shipping_country}. "
-        f"STOP before entering any payment information. "
-        f"Return the final order total shown (including tax and shipping)."
-    ),
-    llm="claude-sonnet-4-5",
-    session_id=session_id    # same live session — browser is still at checkout
-)
-final_price = result_2a  # parse dollar amount from result
+try:
+    result_2a = client.run(
+        task=(
+            f"Go to {product_url}. "
+            f"Add the item to cart and proceed to checkout. "
+            f"Fill in shipping details: "
+            f"Name: {shipping_name}, "
+            f"Address: {shipping_line1} {shipping_line2}, "
+            f"{shipping_city} {shipping_state} {shipping_zip}, {shipping_country}. "
+            f"STOP before entering any payment information. "
+            f"Return the final order total shown (including tax and shipping)."
+        ),
+        llm="claude-sonnet-4-5",
+        session_id=session_id    # same live session — browser is still at checkout
+    )
+except Exception as e:
+    client.sessions.stop(session_id)
+    raise
+final_price = result_2a  # parse dollar amount from result string
 ```
 
 **Mandatory final price confirmation:**
@@ -239,31 +243,30 @@ The browser agent references them as `{{pan}}`, `{{cvv}}`, `{{expiry}}`, `{{expi
 injected by the browser-use runtime and never appear in logs or task text.
 
 ```python
-result_2b = client.run(
-    task=(
-        "The checkout page is already open. "
-        "Enter payment details: card number {{pan}}, CVV {{cvv}}. "
-        "For expiry: try {{expiry_short}} first (MM/YY format, e.g. 02/33). "
-        "If the form rejects it or requires 4-digit year, use {{expiry}} (MM/YYYY, e.g. 02/2033). "
-        "Submit the order. "
-        "Return: order confirmation number and final amount charged."
-    ),
-    llm="claude-sonnet-4-5",
-    session_id=session_id,   # same live session — browser is at payment step
-    secrets={
-        "pan": pan,
-        "cvv": cvv,
-        "expiry": expiry,              # MM/YYYY e.g. "02/2033"
-        "expiry_short": expiry_short,  # MM/YY   e.g. "02/33"
-    }
-)
-
-# Immediately clear all card values from scope
-pan = cvv = expiry = expiry_short = ""
-order_result = result_2b
-
-# Close the live session
-client.sessions.stop(session_id)
+try:
+    result_2b = client.run(
+        task=(
+            "The checkout page is already open. "
+            "Enter payment details: card number {{pan}}, CVV {{cvv}}. "
+            "For expiry: try {{expiry_short}} first (MM/YY format, e.g. 02/33). "
+            "If the form rejects it or requires 4-digit year, use {{expiry}} (MM/YYYY, e.g. 02/2033). "
+            "Submit the order. "
+            "Return: order confirmation number and final amount charged."
+        ),
+        llm="claude-sonnet-4-5",
+        session_id=session_id,   # same live session — browser is at payment step
+        secrets={
+            "pan": pan,
+            "cvv": cvv,
+            "expiry": expiry,              # MM/YYYY e.g. "02/2033"
+            "expiry_short": expiry_short,  # MM/YY   e.g. "02/33"
+        }
+    )
+    order_result = result_2b
+finally:
+    # Always clear card credentials and stop session — even if run() raises
+    pan = cvv = expiry = expiry_short = ""
+    client.sessions.stop(session_id)
 ```
 
 ---

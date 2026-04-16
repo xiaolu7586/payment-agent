@@ -84,8 +84,9 @@ Date        Merchant     Amount   Status    Detail
 Before any purchase, the following checks run in this exact sequence:
 
 1. **Card exists** — `payment-guard` Phase 0: `cards` field in USER.md must be non-empty
-2. **Whitelist** — `payment-guard` Layer 1: merchant must be on approved list (if enabled)
-3. **Threshold** — `payment-guard` Layer 2: amount vs approval threshold
-4. **Shipping address** — `browser-checkout` Phase 0a: collected if physical goods
-5. **Merchant login** — `browser-checkout` Phase 0b: browser-use profile loaded or created
-6. **Card balance** — `browser-checkout` Phase 0c: sufficient funds confirmed via `agentcard balance`
+2. **US merchant** — `payment-guard` Layer 0: merchant must be US-based (AgentCard is US-only — hard block)
+3. **Whitelist** — `payment-guard` Layer 1: merchant must be on approved list (if enabled)
+4. **Threshold** — `payment-guard` Layer 2: amount vs approval threshold
+5. **Shipping address** — `browser-checkout` Phase 0a: collected if physical goods
+6. **Merchant login** — `browser-checkout` Phase 0b: browser-use profile loaded or created
+7. **Card balance** — `browser-checkout` Phase 0c: sufficient funds confirmed via `agentcard balance`

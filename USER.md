@@ -12,7 +12,7 @@ approval_threshold: 0
 ## Card Registry
 
 # Populated automatically after agentcard setup. Do not edit manually.
-# Format: { id: "<card_id>", label: "<optional label>", created: "<date>" }
+# Format: { id: "<card_id>", label: "<label>", created: "<YYYY-MM-DD>", loaded: "$<amount>", status: "active|depleted" }
 cards: []
 
 ## Shipping Address
