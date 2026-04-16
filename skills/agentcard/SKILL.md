@@ -4,7 +4,7 @@ description: "Use this skill when the user wants to: set up a payment card, impo
 license: MIT
 metadata:
   author: xiaolu7586
-  version: "0.4.0"
+  version: "0.5.0"
   homepage: "https://agentcard.ai"
 ---
 
@@ -82,11 +82,15 @@ Parse the output using the same dual-track logic as Workflow 3:
 - If "Real-time balance is not available" → use `Amount` from `agentcard list` as `loaded` (original denomination)
 
 **Write each selected card to USER.md:**
+
+> ⚠️ Date format: `agentcard list` shows dates as M/D/YYYY (e.g. "4/8/2026").
+> Convert to ISO format YYYY-MM-DD (e.g. "2026-04-08") before writing to USER.md.
+
 ```yaml
 cards:
   - id: "<card_id>"
     label: "<user label or 'Imported'>"
-    created: "<creation date from list output>"
+    created: "<YYYY-MM-DD converted from M/D/YYYY in list output>"
     loaded: "$<real-time balance if available, else original denomination>"
     status: "active"
 ```
@@ -242,7 +246,10 @@ Present list to user:
 **Step 3 — Update payment method per platform (if user confirms):**
 
 For each affected subscription, retrieve new card credentials (agentcard Workflow 4) and
-run a browser-use task to update billing settings:
+run a browser-use task to update billing settings.
+
+Do NOT hardcode billing URLs — they change and vary by merchant.
+Let the browser agent navigate from the merchant home page:
 
 ```python
 from browser_use_sdk import BrowserUse
@@ -253,16 +260,20 @@ from browser_use_sdk import BrowserUse
 
 update_session = client.sessions.create(
     profile_id=merchant_profile_id,   # existing login profile for this merchant
+    start_url=f"https://{merchant_domain}",   # navigate from home, not hardcoded billing path
     proxy_country_code="us",
     keep_alive=True
 )
 result = client.run(
     task=(
-        f"Go to {merchant_billing_url}. "
-        f"Update the saved payment method to a new card. "
-        f"Card number: {{{{pan}}}}, Expiry: {{{{expiry}}}}, CVV: {{{{cvv}}}}. "
+        f"You are logged in to {merchant_domain}. "
+        f"Navigate to the billing or subscription settings page. "
+        f"Find the saved payment method and update it to a new card: "
+        f"card number {{{{pan}}}}, "
+        f"expiry {{{{expiry_short}}}} (try MM/YY first, use {{{{expiry}}}} if rejected), "
+        f"CVV {{{{cvv}}}}. "
         f"Confirm the update was saved. "
-        f"Return: confirmation message or screenshot description."
+        f"Return: success confirmation or error message."
     ),
     llm="claude-sonnet-4-5",
     session_id=str(update_session.id),

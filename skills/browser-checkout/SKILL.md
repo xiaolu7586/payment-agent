@@ -4,7 +4,7 @@ description: "Use this skill to execute the actual purchase after payment-guard 
 license: MIT
 metadata:
   author: xiaolu7586
-  version: "0.5.0"
+  version: "0.6.0"
   homepage: "https://cloud.browser-use.com"
 ---
 
@@ -60,20 +60,24 @@ profile = client.profiles.create(name=f"{merchant}-profile")
 profile_id = str(profile.id)
 
 # 2. Open a live browser session so user can log in
+#    Start at merchant home page — let the browser agent find the login button.
+#    Do NOT hardcode /signin — login URLs differ per merchant.
 login_session = client.sessions.create(
     profile_id=profile_id,
-    start_url=f"https://{merchant_domain}/signin",
+    start_url=f"https://{merchant_domain}",
     proxy_country_code="us",
     keep_alive=True
 )
 session_id = str(login_session.id)
 
-# 3. Get a shareable URL for the user to interact with
+# 3. Get a shareable URL the user can open without a browser-use account.
+#    live_url on SessionItemView requires browser-use dashboard login — don't use it.
+#    create_share() returns a public share_url accessible by anyone.
 share = client.sessions.create_share(session_id)
 ```
 
 Tell user:
-> "I've opened a browser session for [merchant]. Please log in at:
+> "I've opened a browser at [merchant_domain]. Please sign in at:
 >  **[share.share_url]**
 >  Once you've signed in, let me know and I'll continue."
 
@@ -155,18 +159,23 @@ live_session = client.sessions.create(
 )
 session_id = str(live_session.id)
 
-# Phase 1: Search
-result = client.run(
-    task=(
-        f"Go to {merchant_url}. "
-        f"Search for: {product_description}. "
-        f"Find the best match under ${budget}. "
-        f"Return: product name, exact current price, product URL, and availability. "
-        f"Do not add to cart yet."
-    ),
-    llm="claude-sonnet-4-5",
-    session_id=session_id    # runs inside the live session
-)
+try:
+    # Phase 1: Search
+    result = client.run(
+        task=(
+            f"Go to {merchant_url}. "
+            f"Search for: {product_description}. "
+            f"Find the best match under ${budget}. "
+            f"Return: product name, exact current price, product URL, and availability. "
+            f"Do not add to cart yet."
+        ),
+        llm="claude-sonnet-4-5",
+        session_id=session_id    # runs inside the live session
+    )
+except Exception as e:
+    client.sessions.stop(session_id)
+    # Log failure and report to user
+    raise
 ```
 
 Present to user: product name, price, URL.
@@ -233,7 +242,9 @@ injected by the browser-use runtime and never appear in logs or task text.
 result_2b = client.run(
     task=(
         "The checkout page is already open. "
-        "Enter payment details: card number {{pan}}, expiry {{expiry}} or {{expiry_short}}, CVV {{cvv}}. "
+        "Enter payment details: card number {{pan}}, CVV {{cvv}}. "
+        "For expiry: try {{expiry_short}} first (MM/YY format, e.g. 02/33). "
+        "If the form rejects it or requires 4-digit year, use {{expiry}} (MM/YYYY, e.g. 02/2033). "
         "Submit the order. "
         "Return: order confirmation number and final amount charged."
     ),
