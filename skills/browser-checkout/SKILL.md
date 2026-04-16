@@ -108,10 +108,11 @@ if not api_key:
 client = BrowserUse(api_key=api_key)
 
 # profile_id from USER.md merchant_profiles (UUID string)
-settings = SessionSettings(
-    profile_id=UUID(merchant_profile_id) if merchant_profile_id else None,
-    proxy_country_code="us"   # AgentCard is US-only; keep proxy in US
-)
+# IMPORTANT: SessionSettings uses camelCase alias 'profileId' — snake_case is silently ignored
+settings = SessionSettings(**{
+    'profileId': merchant_profile_id,   # str UUID from USER.md
+    'proxyCountryCode': 'us',           # AgentCard is US-only; keep proxy in US
+}) if merchant_profile_id else SessionSettings(**{'proxyCountryCode': 'us'})
 
 result = client.run(
     task=(
@@ -169,14 +170,18 @@ Retrieve card credentials immediately before this step via CLI:
 ```bash
 # Run in shell, capture stdout
 agentcard details <card_id>
-# Parse output lines to extract:
-#   Number:  <16-digit number>  → pan
-#   Expiry:  MM/YYYY            → expiry
-#   CVV:     <3-digit number>   → cvv
+# Actual output field names (verified):
+#   Number:  <16-digit number>   → pan
+#   CVV:     <3-digit number>    → cvv
+#   Expiry:  MM/YYYY             → e.g. "02/2033"  ← format is MM/YYYY, not MM/YY
+#
+# Derive short expiry for forms that expect MM/YY:
+#   expiry_short = MM/YY  (e.g. "02/33")
+# Pass both — browser agent uses whichever the checkout form requires.
 ```
 
 Pass credentials via `secrets=` — **never put card values in the task string**.
-The browser agent references them as `{{pan}}`, `{{cvv}}`, `{{expiry}}` — they are
+The browser agent references them as `{{pan}}`, `{{cvv}}`, `{{expiry}}`, `{{expiry_short}}` —
 injected by the browser-use runtime and never appear in logs or task text.
 
 ```python
@@ -189,7 +194,12 @@ result_2b = client.run(
     ),
     llm="claude-sonnet-4-5",
     session_settings=settings,
-    secrets={"pan": pan, "cvv": cvv, "expiry": expiry}  # injected at runtime, not logged
+    secrets={
+        "pan": pan,
+        "cvv": cvv,
+        "expiry": expiry,              # MM/YYYY e.g. "02/2033"
+        "expiry_short": expiry_short,  # MM/YY   e.g. "02/33" — for forms that expect short format
+    }  # injected at runtime, not logged
 )
 
 # Immediately clear card values from scope

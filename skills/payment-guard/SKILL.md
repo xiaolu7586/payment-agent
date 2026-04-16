@@ -72,10 +72,10 @@ Flag the merchant as **likely non-US** if any of the following are true:
 
 | Signal | Examples |
 |--------|----------|
-| Country-code TLD | `.ca`, `.co.uk`, `.de`, `.fr`, `.co.jp`, `.com.au`, `.in`, `.mx`, `.es`, `.it` |
+| Country-code TLD | `.ca`, `.co.uk`, `.de`, `.fr`, `.co.jp`, `.com.au`, `.in`, `.mx`, `.es`, `.it`, `.com.br`, `.nl`, `.se`, `.no`, `.dk`, `.fi`, `.pl`, `.be`, `.ch`, `.at`, `.pt` |
 | Known regional Amazon domain | `amazon.ca`, `amazon.co.uk`, `amazon.de`, `amazon.co.jp`, `amazon.com.au`, `amazon.com.mx`, `amazon.com.br`, `amazon.in`, `amazon.fr`, `amazon.it`, `amazon.es` |
 | Pricing currency other than USD | Site shows CAD, GBP, EUR, AUD, JPY, INR, etc. |
-| Explicit region indicator in URL | `/ca/`, `/uk/`, `/de/`, `/au/` path prefix |
+| Explicit region indicator in URL | `/ca/`, `/uk/`, `/gb/`, `/de/`, `/au/`, `/fr/`, `/jp/`, `/in/`, `/mx/`, `/es/`, `/it/`, `/nl/`, `/se/`, `/br/` as path segment |
 
 ### Decision
 
