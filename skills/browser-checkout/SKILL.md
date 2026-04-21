@@ -31,14 +31,28 @@ Case A — field is empty:
   → Ask: "This order will be shipped to you. What name and address should I use?"
   → Collect: name, line1, line2 (optional), city, state, zip, country
   → Save all fields to USER.md shipping section
+  → If shipping_country ≠ US: surface cross-border notice (see below)
   → Proceed
 
 Case B — field is populated:
   → Ask: "Ship to: [name], [line1], [city] [state] [zip] — still correct?"
+  → Confirmed → if shipping_country ≠ US: surface cross-border notice (see below)
   → Confirmed → proceed
-  → New address given → update USER.md → proceed
+  → New address given → update USER.md → if shipping_country ≠ US: surface notice → proceed
   → Never skip this re-confirmation for physical goods
 ```
+
+**Cross-border notice (show when shipping_country ≠ US and merchant is US-based):**
+```
+"Your shipping address is in [country]. Ordering from a US merchant means:
+ • International shipping will be added at checkout (typically $10–$40+ depending on item/weight)
+ • Some items may be 'US only' — if so, I'll report it and stop
+ • Customs duties or import taxes may be charged by your country on delivery
+   (these are separate from the purchase and paid to your customs authority)
+ The card will work fine. Just flagging so the final total won't surprise you."
+```
+Show this notice once per session, not on every step.
+
 
 ### 0b. Merchant Login / Browser Profile (skip for recurring subscription auto-renew)
 

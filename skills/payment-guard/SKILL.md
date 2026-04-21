@@ -97,7 +97,22 @@ non-US signal detected?
      Which would you prefer?"
 
     → User picks US equivalent:
-        Update merchant to US version → proceed to Layer 1 normally.
+        Before confirming, check USER.md shipping_country:
+
+        If shipping_country is US (or empty/unknown):
+          → Switch merchant to US version → proceed to Layer 1 normally.
+
+        If shipping_country is non-US (e.g. CA, GB, AU):
+          → Surface cross-border caveats before proceeding:
+            "Heads up: your shipping address is in [country].
+             Ordering from [US merchant] and shipping internationally means:
+             • International shipping fees will apply (typically $10–$40+)
+             • Some items may be marked 'ships to US only' and unavailable
+             • Customs duties or import taxes may be charged on delivery
+             The card itself will work fine — the extra costs are on the shipping side.
+             Want to continue with international shipping, or would you prefer
+             to explore other options?"
+          → Wait for explicit confirmation before proceeding.
 
     → User confirms non-US ("try anyway" / "just go for it"):
         Acknowledge risk: "OK, I'll try — but be aware the card will likely be
@@ -108,11 +123,20 @@ non-US signal detected?
     → User doesn't confirm either way:
         Do not proceed. Wait for explicit choice.
 
-  no → proceed to Layer 1
+  no →
+    Check if this is a physical-goods purchase AND shipping_country is non-US:
+      yes → Remind user before browsing:
+              "Your shipping address is in [country]. I'll search on [merchant] —
+               note that international shipping fees and possible customs charges
+               will be added to the listed price. The final total will be confirmed
+               before any payment."
+            Then proceed to Layer 1.
+      no  → proceed to Layer 1 directly.
 ```
 
-> Key principle: surface the limitation **as early as possible** so the user can decide
-> before any browsing work is done. Never discover non-US merchant issues mid-checkout.
+> Key principle: surface limitations **as early as possible** so the user can decide
+> before any browsing work is done. Never discover non-US merchant or cross-border
+> shipping issues mid-checkout.
 
 ---
 
