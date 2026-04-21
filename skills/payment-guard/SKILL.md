@@ -62,9 +62,13 @@ Pass the scenario type to browser-checkout so it knows which Phase 0 context che
 
 ---
 
-## Layer 0: US Merchant Validation (Hard System Constraint)
+## Layer 0: US Merchant Validation (Early Warning)
 
-**AgentCard only works with US-based merchants.** This is a hard technical limitation — the card will be declined at non-US checkout regardless of whitelist or budget settings.
+**AgentCard only works with US-based merchants.** This is a hard technical limitation —
+the card will be declined at non-US checkout regardless of whitelist or budget settings.
+
+> ⚠️ This check runs **before any browsing or searching begins** — never after cart fill.
+> The moment a non-US merchant is detected, stop and surface the warning immediately.
 
 ### How to detect a non-US merchant
 
@@ -81,18 +85,34 @@ Flag the merchant as **likely non-US** if any of the following are true:
 
 ```
 non-US signal detected?
-  yes → HARD STOP. Respond:
-          "AgentCard only works with US merchants — [merchant] looks like a [country]
-           storefront. A US purchase card won't be accepted there.
-           If you meant the US version, I can switch to amazon.com instead.
-           Otherwise you'd need a different payment method for this merchant."
-        Offer to redirect to US equivalent if one exists (e.g. amazon.com).
-        Do not proceed until user confirms a US merchant.
+  yes → EARLY WARNING (before any browsing). Respond:
+
+    "[Merchant] looks like a [country] storefront. AgentCard is US-only —
+     payment will likely be declined at checkout.
+
+     Options:
+     1. Switch to [US equivalent, e.g. amazon.com] — recommended, higher success rate
+     2. Try [merchant] anyway — I'll proceed but payment may fail
+
+     Which would you prefer?"
+
+    → User picks US equivalent:
+        Update merchant to US version → proceed to Layer 1 normally.
+
+    → User confirms non-US ("try anyway" / "just go for it"):
+        Acknowledge risk: "OK, I'll try — but be aware the card will likely be
+        declined at payment. I'll stop and report clearly if that happens."
+        Log: [ISO timestamp] | warning | [merchant] | — | [card_id] | non_us_override | user confirmed
+        Proceed to Layer 1 with non-US merchant.
+
+    → User doesn't confirm either way:
+        Do not proceed. Wait for explicit choice.
 
   no → proceed to Layer 1
 ```
 
-> This check runs before both the whitelist and the threshold — there's no point validating rules for a merchant where payment is impossible.
+> Key principle: surface the limitation **as early as possible** so the user can decide
+> before any browsing work is done. Never discover non-US merchant issues mid-checkout.
 
 ---
 
@@ -175,7 +195,10 @@ Use the unified format — **always include card_id** even if the card wasn't ch
 # Blocked by whitelist
 [ISO timestamp] | blocked    | [merchant] | $[amount] | [card_id] | guard_blocked  | not on whitelist
 
-# Blocked by US merchant check
+# User warned about non-US merchant but chose to proceed anyway
+[ISO timestamp] | warning    | [merchant] | —         | [card_id] | non_us_override | user confirmed
+
+# Blocked by US merchant check (user declined to proceed)
 [ISO timestamp] | blocked    | [merchant] | $[amount] | [card_id] | guard_blocked  | non-US merchant
 
 # User cancelled at threshold gate
