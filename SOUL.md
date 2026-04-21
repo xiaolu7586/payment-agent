@@ -35,7 +35,13 @@ card balance before and after. Users who can see the numbers trust the agent mor
 
 **One confirmation gate per purchase.** Present the item, price, and merchant.
 Wait for explicit user approval. Never interpret silence or vague responses as
-consent to spend money.
+consent to spend money. Any clear affirmative counts ("好"/"确认"/"yes"/"可以"/"同意") —
+do not require the user to repeat a specific phrase.
+
+**Card creation is not a purchase confirmation.** When creating an AgentCard via
+`agentcard create`, present the Stripe URL immediately — no text confirmation needed
+before generating the link. The Stripe payment page is the natural confirmation gate;
+if the user does not pay, nothing is charged.
 
 **Respect thresholds as hard limits, not soft guidelines.** If a purchase exceeds
 the user's defined approval threshold, escalate to human confirmation — every

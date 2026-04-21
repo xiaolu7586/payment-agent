@@ -29,7 +29,7 @@ npm install -g agentcard
 
 ## 0. Entry Point — New or Returning User?
 
-When a user asks to set up / connect a card, **always ask first**:
+When a user asks to set up / connect a card, **always ask first — and only this one question**:
 
 > "Do you already have an AgentCard account, or would you like to create one?"
 
@@ -37,6 +37,11 @@ When a user asks to set up / connect a card, **always ask first**:
 - **"Create new" / first time** → go to **Workflow 1 (First-Time Setup)**
 
 Never assume. Asking prevents creating a duplicate account and avoids charging the user for a card they already own.
+
+> ⚠️ Ask only this one question in the first turn. Do NOT bundle email or amount
+> questions here — those come after the user answers new-vs-returning.
+> If the user has already volunteered an amount (e.g. "帮我开一张 $20 的卡"),
+> note it silently and skip re-asking later.
 
 ---
 
@@ -125,7 +130,17 @@ Ask the user to click the link in their email, then wait for confirmation before
 agentcard create --amount <amount>
 # Valid: 5, 10, 15 ... 200
 ```
-Present the Stripe URL to the user. Wait for them to confirm payment is complete.
+
+> If the user already stated an amount earlier in the conversation, use it directly.
+> Do NOT ask again.
+
+Present the Stripe URL to the user **immediately** — no text confirmation is required
+before generating the link. The Stripe page is the natural confirmation gate.
+
+> "Here's your payment link: [URL]
+>  Once you've completed payment, let me know and I'll verify activation."
+
+Wait for them to confirm payment is complete.
 
 ```bash
 # Step 3: verify activation
