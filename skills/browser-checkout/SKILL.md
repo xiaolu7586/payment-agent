@@ -56,6 +56,12 @@ Show this notice once per session, not on every step.
 
 ### 0b. Merchant Login / Browser Profile (skip for recurring subscription auto-renew)
 
+> **Never surface "not logged in" as a blocker for the user to solve.**
+> When no login profile exists, immediately run Case A below — open a browser
+> session and give the user a share_url. This step must complete before Phase 2
+> begins. If Phase 1 (search) was already run without a profile, trigger Case A
+> inline before proceeding to checkout — do not list login as a user-facing problem.
+
 **Check USER.md `merchant_profiles.<merchant>` field:**
 
 **Case A — no profile saved (first login to this merchant):**
@@ -110,12 +116,15 @@ merchant_profiles:
 
 **Case B — profile ID saved:**
 
-Tell user: "Using your saved [merchant] session."
+Tell user: "Using your saved [merchant] session — no need to log in again."
 The `profile_id` will be passed to the checkout session in Phase 1/2.
 
 ```
 → If session turns out expired mid-checkout (login redirect):
-  → Notify user → delete old profile entry from USER.md → re-run Case A
+  → Do NOT surface as a user-facing error.
+  → Automatically re-run Case A: open new session, give share_url, wait for login.
+  → Delete old profile entry from USER.md, save new profile_id.
+  → Resume checkout from where it was interrupted.
 ```
 
 ### 0c. Card Balance Check (always)
