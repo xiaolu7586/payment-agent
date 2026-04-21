@@ -22,39 +22,55 @@ Executes browser-based shopping workflows using browser-use.com cloud automation
 Context is collected lazily — only when the current purchase scenario requires it.
 Once collected, saved to USER.md and re-confirmed on subsequent uses.
 
-### 0 (pre-flight). Browser Use API Key
+### 0 (pre-flight). Browser Tool Routing
 
-**Before any other step**, check that `BROWSER_USE_API_KEY` is available:
-
-```python
-import os, json
-from pathlib import Path
-
-api_key = os.environ.get("BROWSER_USE_API_KEY") or \
-    json.loads(Path(".secrets/env.json").read_text()).get("BROWSER_USE_API_KEY") \
-    if Path(".secrets/env.json").exists() else None
-```
+Two execution paths depending on what the user actually needs:
 
 ```
-api_key present and non-empty → proceed to Phase 0a
+┌─────────────────────────────────────────────────────────────────┐
+│ PATH A — Search & Compare only (no purchase intent)             │
+│                                                                 │
+│ Signals: user wants prices / availability / options,            │
+│          has NOT confirmed they want to buy yet                 │
+│                                                                 │
+│ → Use ClawDI built-in browser tool                              │
+│ → No BROWSER_USE_API_KEY required                               │
+│ → Run Phase 1 only; present results; stop                       │
+│ → If user later says "buy this" → re-enter at PATH B            │
+└─────────────────────────────────────────────────────────────────┘
 
-api_key missing or empty →
-  Tell user:
-    "To run browser-based checkout, I need a Browser Use API key.
-     You can get one free at: https://cloud.browser-use.com/settings
-     (Sign up → Settings → API Keys → Create)
-
-     Once you have it, paste it here and I'll save it for future use."
-
-  Wait for user to paste key.
-  Save to .secrets/env.json:
-    { "BROWSER_USE_API_KEY": "<key_provided_by_user>" }
-  Confirm: "Saved. Continuing with your purchase..."
-  Proceed to Phase 0a.
+┌─────────────────────────────────────────────────────────────────┐
+│ PATH B — Full Checkout (user is purchasing)                     │
+│                                                                 │
+│ Signals: payment-guard has approved, user confirmed purchase    │
+│                                                                 │
+│ Why Browser Use is required here (ClawDI browser cannot do):   │
+│  • keep_alive session across Phase 1 → 2a → 2b                 │
+│    (cart state must survive between steps)                      │
+│  • Persistent merchant login profiles (cookie storage)          │
+│  • share_url so user can log in to merchant interactively       │
+│                                                                 │
+│ → Check BROWSER_USE_API_KEY:                                    │
+│                                                                 │
+│   Present → proceed to Phase 0a                                 │
+│                                                                 │
+│   Missing →                                                     │
+│     "To complete checkout I need a Browser Use API key —        │
+│      it handles the persistent browser session and merchant     │
+│      login securely. One-time setup:                            │
+│      1. Go to https://cloud.browser-use.com/settings            │
+│      2. Sign up (free tier available)                           │
+│      3. Settings → API Keys → Create → paste it here"          │
+│     Wait for user to paste key.                                 │
+│     Save to .secrets/env.json: {"BROWSER_USE_API_KEY": "..."}  │
+│     Confirm: "Saved. Continuing with checkout..."               │
+│     Proceed to Phase 0a.                                        │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-> This check runs once per session. If the key was just saved, use it immediately
-> without asking the user again.
+> **Decision rule:** If payment-guard has already approved the transaction,
+> you are in PATH B. PATH A is only for pre-purchase research requests
+> where no payment-guard run has occurred.
 
 ---
 

@@ -84,10 +84,13 @@ Date        Merchant     Amount   Status    Detail
 Before any purchase, the following checks run in this exact sequence:
 
 1. **Card exists** — `payment-guard` Phase 0: `cards` field in USER.md must be non-empty
-2. **US merchant** — `payment-guard` Layer 0: merchant must be US-based (AgentCard is US-only — hard block)
+2. **US merchant** — `payment-guard` Layer 0: merchant must be US-based (early warning + user choice)
 3. **Whitelist** — `payment-guard` Layer 1: merchant must be on approved list (if enabled)
 4. **Threshold** — `payment-guard` Layer 2: amount vs approval threshold
-5. **Browser Use API key** — `browser-checkout` Phase 0 pre-flight: `BROWSER_USE_API_KEY` must be present; if missing, prompt user to get one at cloud.browser-use.com and save it
-6. **Shipping address** — `browser-checkout` Phase 0a: collected if physical goods
-7. **Merchant login** — `browser-checkout` Phase 0b: browser-use profile loaded or created
+5. **Browser tool** — `browser-checkout` Phase 0 pre-flight:
+   - Search/compare only → ClawDI built-in browser, **no API key needed**
+   - Full checkout (Phase 2) → Browser Use required for persistent session + merchant login
+     If `BROWSER_USE_API_KEY` missing → prompt user once, save to `.secrets/env.json`
+6. **Shipping address** — `browser-checkout` Phase 0a: collected if physical goods; cross-border notice if non-US address
+7. **Merchant login** — `browser-checkout` Phase 0b: Browser Use profile loaded or created via share_url
 8. **Card balance** — `browser-checkout` Phase 0c: sufficient funds confirmed via `agentcard balance`
