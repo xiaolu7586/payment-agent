@@ -22,6 +22,42 @@ Executes browser-based shopping workflows using browser-use.com cloud automation
 Context is collected lazily — only when the current purchase scenario requires it.
 Once collected, saved to USER.md and re-confirmed on subsequent uses.
 
+### 0 (pre-flight). Browser Use API Key
+
+**Before any other step**, check that `BROWSER_USE_API_KEY` is available:
+
+```python
+import os, json
+from pathlib import Path
+
+api_key = os.environ.get("BROWSER_USE_API_KEY") or \
+    json.loads(Path(".secrets/env.json").read_text()).get("BROWSER_USE_API_KEY") \
+    if Path(".secrets/env.json").exists() else None
+```
+
+```
+api_key present and non-empty → proceed to Phase 0a
+
+api_key missing or empty →
+  Tell user:
+    "To run browser-based checkout, I need a Browser Use API key.
+     You can get one free at: https://cloud.browser-use.com/settings
+     (Sign up → Settings → API Keys → Create)
+
+     Once you have it, paste it here and I'll save it for future use."
+
+  Wait for user to paste key.
+  Save to .secrets/env.json:
+    { "BROWSER_USE_API_KEY": "<key_provided_by_user>" }
+  Confirm: "Saved. Continuing with your purchase..."
+  Proceed to Phase 0a.
+```
+
+> This check runs once per session. If the key was just saved, use it immediately
+> without asking the user again.
+
+---
+
 ### 0a. Shipping Address (physical goods only — skip for SaaS, subscriptions, tickets, digital)
 
 **Check USER.md `shipping_name` field:**

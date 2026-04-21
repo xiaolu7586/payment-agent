@@ -91,6 +91,21 @@ def main():
         except json.JSONDecodeError:
             pass
 
+    # Warn if BROWSER_USE_API_KEY is still missing after setup
+    api_key = os.environ.get("BROWSER_USE_API_KEY", "").strip()
+    if not api_key and ENV_PATH.exists():
+        try:
+            api_key = json.loads(ENV_PATH.read_text()).get("BROWSER_USE_API_KEY", "").strip()
+        except Exception:
+            pass
+    if not api_key:
+        print(
+            "[warn] BROWSER_USE_API_KEY not set.\n"
+            "       Browser-based checkout will not work until this is provided.\n"
+            "       Get your key at: https://cloud.browser-use.com/settings\n"
+            "       The agent will prompt you for it the first time you attempt a purchase."
+        )
+
     print("=== Setup complete ===")
 
 
